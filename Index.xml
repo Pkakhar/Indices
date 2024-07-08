@@ -1,0 +1,58 @@
+import yfinance as yf
+import requests
+import xml.etree.ElementTree as ET
+
+def get_quote(symbol, api_key):
+    url = f'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={api_key}'
+    response = requests.get(url)
+    return response.json()
+
+def get_index_data(index_symbol):
+    index = yf.Ticker(index_symbol)
+    data = index.history(period='1d')
+    latest = data.iloc[-1]
+    return {
+        'symbol': index_symbol,
+        'open': latest['Open'],
+        'high': latest['High'],
+        'low': latest['Low'],
+        'price': latest['Close'],
+        'change': latest['Close'] - latest['Open'],
+        'change_percent': ((latest['Close'] - latest['Open']) / latest['Open']) * 100
+    }
+
+def create_rss(quotes):
+    rss = ET.Element('rss', version='2.0')
+    channel = ET.SubElement(rss, 'channel')
+    title = ET.SubElement(channel, 'title')
+    title.text = 'Live Stock Indices Updates'
+    
+    for quote in quotes:
+        item = ET.SubElement(channel, 'item')
+        title = ET.SubElement(item, 'title')
+        title.text = f"{quote['symbol']} - {quote['price']}"
+        description = ET.SubElement(item, 'description')
+        description.text = f"Open: {quote['open']}, High: {quote['high']}, Low: {quote['low']}, Change: {quote['change']} ({quote['change_percent']}%)"
+    
+    return ET.tostring(rss, encoding='utf-8').decode('utf-8')
+
+# Example usage
+api_key = 'ZBP2BVNFUX93H5TL'
+symbols = [
+    '^N225', # Nikkei
+    '^IXIC', # Nasdaq
+    '^INX'   # S&P 500
+]
+
+# Fetch data from Alpha Vantage
+quotes = [get_quote(symbol, api_key)['Global Quote'] for symbol in symbols]
+
+# Fetch data for Nifty 50 and Sensex from Yahoo Finance
+nifty_data = get_index_data("^NSEI")
+sensex_data = get_index_data("^BSESN")
+
+# Combine all data
+quotes.extend([nifty_data, sensex_data])
+
+rss_feed = create_rss(quotes)
+print(rss_feed)
